@@ -8,9 +8,10 @@ options:
   bundleIdPrefix: top.lycl
   deploymentTarget:
     iOS: "14.0"
+  # 锁定为 Xcode 14 的工程格式，向下兼容所有 Xcode 14/15/16
+  objectVersion: 56
   createIntermediateGroups: true
   groupSortPosition: top
-  xcodeVersion: "15.0"
   generateEmptyDirectories: true
 
 settings:
