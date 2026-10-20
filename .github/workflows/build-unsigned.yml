@@ -42,7 +42,11 @@ jobs:
       - name: Generate Xcode project
         run: |
           xcodegen generate --spec project.yml
-          grep -m1 "objectVersion" GhostProtocol.xcodeproj/project.pbxproj || true
+          PBX=GhostProtocol.xcodeproj/project.pbxproj
+          echo "XcodeGen 生成格式: $(grep -m1 -oE 'objectVersion = [0-9]+' "$PBX" || echo '未找到')"
+          # 新版 XcodeGen 会输出 Xcode16 格式(77)，CI 上的 Xcode 15.4 读不了，统一降到 56
+          perl -pi -e 's/objectVersion = \d+;/objectVersion = 56;/g; s/LastUpgradeCheck = \d+;/LastUpgradeCheck = 1400;/g' "$PBX"
+          echo "降级后格式:     $(grep -m1 -oE 'objectVersion = [0-9]+' "$PBX")"
 
       - name: Build
         run: |
