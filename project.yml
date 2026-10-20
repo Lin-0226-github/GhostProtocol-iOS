@@ -1,0 +1,59 @@
+# 用 XcodeGen 生成 .xcodeproj（无需手写工程文件）
+# 本地：brew install xcodegen && xcodegen generate
+# 云端：GitHub Actions 里自动执行
+
+name: GhostProtocol
+
+options:
+  bundleIdPrefix: top.lycl
+  deploymentTarget:
+    iOS: "14.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+  xcodeVersion: "15.0"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "14.0"
+    ENABLE_BITCODE: NO
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    ALWAYS_SEARCH_USER_PATHS: NO
+    CLANG_ENABLE_MODULES: YES
+    SWIFT_COMPILATION_MODE: wholemodule
+
+targets:
+  GhostProtocol:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+    settings:
+      base:
+        INFOPLIST_FILE: Supporting/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: top.lycl.ghostprotocol
+        PRODUCT_NAME: GhostProtocol
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_STYLE: Automatic
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+        IPHONEOS_DEPLOYMENT_TARGET: "14.0"
+
+schemes:
+  GhostProtocol:
+    build:
+      targets:
+        GhostProtocol: all
+    run:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

@@ -1,0 +1,100 @@
+name: Build IPA (unsigned)
+
+# 不需要任何证书 / Apple 账号，产出「未签名 IPA」。
+# 下载后可用 Sideloadly / AltStore 用自己的 Apple ID 自签安装。
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - "App/**"
+      - "Supporting/**"
+      - "project.yml"
+      - ".github/workflows/build-unsigned.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build unsigned IPA
+    runs-on: macos-14
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcode-select -p
+          sw_vers
+
+      - name: Install XcodeGen
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          fi
+          xcodegen --version
+
+      - name: Generate Xcode project
+        run: xcodegen generate --spec project.yml
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project GhostProtocol.xcodeproj \
+            -scheme GhostProtocol \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package IPA
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' -type d | head -n 1)"
+          if [ -z "$APP_PATH" ]; then
+            echo "::error::没有找到 .app 产物，构建可能失败"
+            ls -R build/Build/Products || true
+            exit 1
+          fi
+
+          echo "产物路径: $APP_PATH"
+          rm -rf Payload out
+          mkdir -p Payload out
+          cp -R "$APP_PATH" Payload/
+
+          /usr/bin/zip -qry out/GhostProtocol-unsigned.ipa Payload
+          ls -lh out/GhostProtocol-unsigned.ipa
+          unzip -l out/GhostProtocol-unsigned.ipa | head -n 15
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: GhostProtocol-unsigned-ipa
+          path: out/GhostProtocol-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### 构建结果"
+            echo ""
+            if [ -f out/GhostProtocol-unsigned.ipa ]; then
+              echo "- 产物：\`GhostProtocol-unsigned.ipa\`（$(du -h out/GhostProtocol-unsigned.ipa | cut -f1)）"
+              echo "- 类型：**未签名**，需要用 Sideloadly / AltStore 自签后才能装进 iPhone"
+              echo "- 下载：本页底部 Artifacts → \`GhostProtocol-unsigned-ipa\`"
+            else
+              echo "- 构建失败，请查看上方日志"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
