@@ -40,7 +40,9 @@ jobs:
           xcodegen --version
 
       - name: Generate Xcode project
-        run: xcodegen generate --spec project.yml
+        run: |
+          xcodegen generate --spec project.yml
+          grep -m1 "objectVersion" GhostProtocol.xcodeproj/project.pbxproj || true
 
       - name: Build
         run: |
