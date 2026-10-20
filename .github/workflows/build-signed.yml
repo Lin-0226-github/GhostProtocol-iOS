@@ -1,0 +1,152 @@
+name: Build IPA (signed)
+
+# 可选流程：如果你有 Apple 开发者账号（付费 $99/年），配置好 Secrets 后
+# 可直接产出「已签名 IPA」，装到手机上不会 7 天掉签。
+#
+# 需要在 Settings → Secrets and variables → Actions 配置：
+#   Secrets:
+#     BUILD_CERTIFICATE_BASE64     导出的 .p12 证书，base64 编码
+#     P12_PASSWORD                 .p12 的导出密码
+#     KEYCHAIN_PASSWORD            随便一个临时密码（仅 CI 内使用）
+#     PROVISIONING_PROFILE_BASE64  描述文件 .mobileprovision，base64 编码
+#     TEAM_ID                      开发者团队 ID（10 位，Apple 开发者后台可见）
+#   Variables（可选）:
+#     BUNDLE_ID                    默认 top.lycl.ghostprotocol，必须与 project.yml 一致
+
+on:
+  workflow_dispatch:
+    inputs:
+      export_method:
+        description: "导出方式（ad-hoc 需要把设备 UDID 加进描述文件）"
+        required: true
+        default: "ad-hoc"
+        type: choice
+        options:
+          - ad-hoc
+          - development
+          - app-store-connect
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build signed IPA
+    runs-on: macos-14
+    timeout-minutes: 45
+
+    env:
+      CERT_B64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+      CERT_PASSWORD: ${{ secrets.P12_PASSWORD }}
+      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      PROFILE_B64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+      TEAM_ID: ${{ secrets.TEAM_ID }}
+      BUNDLE_ID: ${{ vars.BUNDLE_ID || 'top.lycl.ghostprotocol' }}
+      EXPORT_METHOD: ${{ inputs.export_method }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check secrets
+        run: |
+          missing=0
+          for name in CERT_B64 CERT_PASSWORD KEYCHAIN_PASSWORD PROFILE_B64 TEAM_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::缺少 secret: $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "请先按 README 配置证书相关 Secrets，或改用 Build IPA (unsigned) 流程。"
+            exit 1
+          fi
+
+      - name: Install XcodeGen
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          fi
+          xcodegen --version
+
+      - name: Generate Xcode project
+        run: xcodegen generate --spec project.yml
+
+      - name: Import certificate and profile
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
+
+          python3 -c 'import base64,os,sys; open(sys.argv[1],"wb").write(base64.b64decode(os.environ["CERT_B64"]))' "$CERT_PATH"
+          python3 -c 'import base64,os,sys; open(sys.argv[1],"wb").write(base64.b64decode(os.environ["PROFILE_B64"]))' "$PROFILE_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/
+
+          PROFILE_UUID=$(security cms -D -i "$PROFILE_PATH" | /usr/libexec/PlistBuddy -c 'Print :UUID' /dev/stdin)
+          echo "描述文件 UUID: $PROFILE_UUID"
+          echo "PROFILE_UUID=$PROFILE_UUID" >> "$GITHUB_ENV"
+
+      - name: Archive
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -project GhostProtocol.xcodeproj \
+            -scheme GhostProtocol \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath build/GhostProtocol.xcarchive \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID"
+
+      - name: Export IPA
+        run: |
+          set -euo pipefail
+          EXPORT_PLIST="$RUNNER_TEMP/ExportOptions.plist"
+
+          # 先写一个最小合法 plist，再用 PlistBuddy 填充（避免 heredoc 缩进破坏 XML 声明）
+          printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict/></plist>\n' > "$EXPORT_PLIST"
+
+          PB=/usr/libexec/PlistBuddy
+          "$PB" -c "Add :method string ${EXPORT_METHOD}" "$EXPORT_PLIST"
+          "$PB" -c "Add :teamID string ${TEAM_ID}" "$EXPORT_PLIST"
+          "$PB" -c "Add :signingStyle string manual" "$EXPORT_PLIST"
+          "$PB" -c "Add :stripSwiftSymbols bool true" "$EXPORT_PLIST"
+          "$PB" -c "Add :compileBitcode bool false" "$EXPORT_PLIST"
+          "$PB" -c "Add :provisioningProfiles dict" "$EXPORT_PLIST"
+          "$PB" -c "Add :provisioningProfiles:${BUNDLE_ID} string ${PROFILE_UUID}" "$EXPORT_PLIST"
+
+          cat "$EXPORT_PLIST"
+
+          xcodebuild -exportArchive \
+            -archivePath build/GhostProtocol.xcarchive \
+            -exportOptionsPlist "$EXPORT_PLIST" \
+            -exportPath out
+
+          ls -lh out
+          if [ ! -f out/GhostProtocol.ipa ]; then
+            echo "::error::没有导出 IPA"
+            exit 1
+          fi
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: GhostProtocol-signed-ipa
+          path: out/*.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Clean up keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" || true
