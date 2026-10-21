@@ -1,27 +1,37 @@
-# 指挥中心 v1.0.1 · 正式版
+# 指挥中心 v1.0.2 · 正式版
 
 把 **全球灵异事件处理总部（GHOST PROTOCOL）** 封装成原生 iOS 应用。
 
 ## 本版修复
 
-### 卡片背景变成整块亮绿色、内容被遮挡
+站点由 Tailwind v4 构建，大量使用了 iOS 16.4+ 才支持的 CSS 特性。WKWebView 遇到不认识的语法时不是降级渲染，而是**整条声明丢弃**，于是布局出现肉眼可见的破版。本版针对两处做了运行时兼容。
 
-站点用 Tailwind v4 的 `bg-primary/[0.07]` 这类透明度类，编译产物是两条同选择器规则：
+### 1. 渐变全部消失（本版新增）
 
 ```css
-.bg-primary\/\[0\.07\]{background-color:var(--primary)}                                  /* 纯色兜底 */
+.bg-gradient-to-r{--tw-gradient-position:to right in oklab;background-image:linear-gradient(var(--tw-gradient-stops))}
+```
+
+`in oklab` 插值语法需要 Safari 16.4+。旧版 WebKit 解析失败后会丢弃整条 `background-image`，导致**全站 488 处渐变一起失效**——横幅两端渐隐变成实心色块、卡片光晕和按钮底色消失。
+
+修复方式：注入样式把 `--tw-gradient-position` 的插值空间退回默认 sRGB，渐变本身保留，只是颜色过渡不走 oklab。
+
+### 2. 卡片背景变成整块亮绿色、内容被遮挡
+
+```css
+.bg-primary\/\[0\.07\]{background-color:var(--primary)}                                   /* 纯色兜底 */
 .bg-primary\/\[0\.07\]{background-color:color-mix(in oklab,var(--primary) 7%,transparent)} /* 正确值 */
 ```
 
-`color-mix()` 需要 Safari 16.2+。宿主不支持时第二条被整条丢弃，背景退化为 **100% 不透明的主题绿**，于是卡片变成一整块亮绿色并盖住标题、进度数字等内容。
+`color-mix()` 需要 Safari 16.2+。不支持时第二条被丢弃，背景退化为 100% 不透明的主题绿，盖住标题与进度数字。
 
-本版加入运行时兜底：凡「类名声明了透明度、但计算值是不透明纯色」的元素，按类名里的 alpha 重写为 `rgba()`。宿主本身支持 `color-mix()` 时计算值已是半透明，会自动跳过，不会重复干预。
+修复方式：运行时检测「类名声明了透明度、计算值却是不透明纯色」的元素，按类名里的 alpha 重写为 `rgba()`。宿主支持 `color-mix()` 时自动跳过，不重复干预。
 
-### 整页被放大、顶部导航消失、标题被裁切
+### 3. 整页被放大、顶部导航消失
 
-WKWebView 在布局完成前加载页面时，`bounds` 仍为 `.zero`，viewport 按 0 宽计算，导致 `width=device-width` 失效。已改为在 `viewDidLayoutSubviews` 中确认拿到真实宽度后再加载。
+WKWebView 在布局完成前加载页面时 `bounds` 仍为 `.zero`，viewport 按 0 宽计算导致 `width=device-width` 失效。改为在 `viewDidLayoutSubviews` 中确认拿到真实宽度后再加载。
 
-### 字体被二次放大
+### 4. 字体被二次放大
 
 注入 `-webkit-text-size-adjust: 100%`，避免窄视口下 WebKit 的自动字号放大干扰排版。
 
@@ -56,7 +66,7 @@ WKWebView 在布局完成前加载页面时，`bounds` 仍为 `.zero`，viewport
 
 | 项目 | 值 |
 | --- | --- |
-| 版本 | 1.0.1 (Build 2) |
+| 版本 | 1.0.2 (Build 3) |
 | Bundle ID | `top.lycl.ghostprotocol` |
 | 最低系统 | iOS 14.0 |
 | 架构 | arm64 |
