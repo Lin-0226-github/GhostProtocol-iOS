@@ -1,0 +1,101 @@
+name: Release IPA
+
+# 推一个 v* 的 tag（如 v1.0.0）就会：云端编译 → 打包 IPA → 自动创建 GitHub Release 并附上产物。
+# 这是"发正式版"的标准入口，不需要本地装 Xcode。
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要发布的 tag（例如 v1.0.0，需已存在）"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: macos-14
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcode-select -p
+
+      - name: Install XcodeGen
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+          fi
+          xcodegen --version
+
+      - name: Generate Xcode project
+        run: |
+          xcodegen generate --spec project.yml
+          PBX=GhostProtocol.xcodeproj/project.pbxproj
+          # 新版 XcodeGen 默认输出 Xcode16 格式(77)，统一降到 56 以兼容 Xcode 14/15/16
+          perl -pi -e 's/objectVersion = \d+;/objectVersion = 56;/g; s/LastUpgradeCheck = \d+;/LastUpgradeCheck = 1400;/g' "$PBX"
+          grep -m1 -oE 'objectVersion = [0-9]+' "$PBX"
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project GhostProtocol.xcodeproj \
+            -scheme GhostProtocol \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package IPA
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' -type d | head -n 1)"
+          if [ -z "$APP_PATH" ]; then
+            echo "::error::没有找到 .app 产物"
+            exit 1
+          fi
+          rm -rf Payload out && mkdir -p Payload out
+          cp -R "$APP_PATH" Payload/
+          VERSION="${GITHUB_REF_NAME#v}"
+          OUT="out/GhostProtocol-${VERSION}-unsigned.ipa"
+          /usr/bin/zip -qry "$OUT" Payload
+          ls -lh "$OUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$TAG 正式版" \
+              --notes-file RELEASE_NOTES.md
+          fi
+          gh release upload "$TAG" out/*.ipa --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### 发布结果"
+            echo ""
+            echo "- Tag：\`${GITHUB_REF_NAME}\`"
+            echo "- Release：https://github.com/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME}"
+          } >> "$GITHUB_STEP_SUMMARY"
