@@ -2,8 +2,12 @@
 
 把 **https://lycl.top/**（全球灵异事件处理总部 · GHOST PROTOCOL）包装成一个原生 iOS App。
 
+**当前版本：v1.0.0** ｜ [下载正式版 IPA](https://github.com/Lin-0226-github/GhostProtocol-iOS/releases/latest)
+
 > 需要先说明一点：IPA 是 iOS 原生安装包，**只能在 macOS + Xcode 上编译并用 Apple 证书签名**，任何 Linux / Windows 环境都做不出来。
 > 所以这套工程的设计是：**推送到 GitHub → 由 GitHub 的 macOS 机器自动编译 → 下载 IPA**。你不需要有 Mac。
+>
+> 发新版本只需推送一个 tag（如 `v1.0.1`），`Release IPA` 流水线会自动编译并创建 Release。
 
 ---
 
