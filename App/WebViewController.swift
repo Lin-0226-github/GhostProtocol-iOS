@@ -126,6 +126,12 @@ final class WebViewController: UIViewController {
             WKUserScript(source: SitePatches.alphaFallback, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
         )
 
+        // 修复渐变里的 `in oklab` 插值语法：旧版 WebKit 会整条丢弃 background-image，
+        // 导致全站渐变（横幅渐隐、卡片光晕、按钮底色）全部消失
+        configuration.userContentController.addUserScript(
+            WKUserScript(source: SitePatches.gradientFallback, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        )
+
         return configuration
     }
 
