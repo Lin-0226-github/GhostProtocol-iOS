@@ -1,39 +1,35 @@
-# 指挥中心 v1.0.2 · 正式版
+# 指挥中心 v1.0.3 · 正式版
 
 把 **全球灵异事件处理总部（GHOST PROTOCOL）** 封装成原生 iOS 应用。
 
-## 本版修复
+## 本版更新
 
-站点由 Tailwind v4 构建，大量使用了 iOS 16.4+ 才支持的 CSS 特性。WKWebView 遇到不认识的语法时不是降级渲染，而是**整条声明丢弃**，于是布局出现肉眼可见的破版。本版针对两处做了运行时兼容。
+### 1. 边框、文字颜色过亮（本版新增）
 
-### 1. 渐变全部消失（本版新增）
-
-```css
-.bg-gradient-to-r{--tw-gradient-position:to right in oklab;background-image:linear-gradient(var(--tw-gradient-stops))}
-```
-
-`in oklab` 插值语法需要 Safari 16.4+。旧版 WebKit 解析失败后会丢弃整条 `background-image`，导致**全站 488 处渐变一起失效**——横幅两端渐隐变成实心色块、卡片光晕和按钮底色消失。
-
-修复方式：注入样式把 `--tw-gradient-position` 的插值空间退回默认 sRGB，渐变本身保留，只是颜色过渡不走 oklab。
-
-### 2. 卡片背景变成整块亮绿色、内容被遮挡
+`border-primary/40`、`text-muted-foreground/70` 和背景色是同一套机制：
 
 ```css
-.bg-primary\/\[0\.07\]{background-color:var(--primary)}                                   /* 纯色兜底 */
-.bg-primary\/\[0\.07\]{background-color:color-mix(in oklab,var(--primary) 7%,transparent)} /* 正确值 */
+.border-primary\/40{border-color:var(--primary)}                                  /* 纯色兜底 */
+.border-primary\/40{border-color:color-mix(in oklab,var(--primary) 40%,transparent)} /* 正确值 */
 ```
 
-`color-mix()` 需要 Safari 16.2+。不支持时第二条被丢弃，背景退化为 100% 不透明的主题绿，盖住标题与进度数字。
+`color-mix()` 不受支持时退回纯色，边框从 40% 变成 100% 纯绿，看起来比正常情况亮一档。
 
-修复方式：运行时检测「类名声明了透明度、计算值却是不透明纯色」的元素，按类名里的 alpha 重写为 `rgba()`。宿主支持 `color-mix()` 时自动跳过，不重复干预。
+兼容层原本只修复 `bg-*`，本版扩展到三类：
+- `bg-*` → `backgroundColor`
+- `text-*` → `color`
+- `border-*` → `borderColor`
 
-### 3. 整页被放大、顶部导航消失
+### 2. 新增摇一摇诊断
 
-WKWebView 在布局完成前加载页面时 `bounds` 仍为 `.zero`，viewport 按 0 宽计算导致 `width=device-width` 失效。改为在 `viewDidLayoutSubviews` 中确认拿到真实宽度后再加载。
+仍然有错位的元素时，**摇一摇手机**会把当前页面告警横幅及其 8 层祖先元素的实际样式打在屏幕上（背景色、宽度、内边距、定位、溢出等），点击任意位置关闭。用于在缺少 Safari 检查器的情况下定位剩余的 CSS 兼容问题。
 
-### 4. 字体被二次放大
+### 3. 历史修复
 
-注入 `-webkit-text-size-adjust: 100%`，避免窄视口下 WebKit 的自动字号放大干扰排版。
+- **全站渐变消失**：`linear-gradient(to right in oklab, ...)` 需要 Safari 16.4+，旧引擎整条丢弃，488 处渐变失效。已把插值空间退回 sRGB。
+- **卡片背景变整块亮绿**：`color-mix()` 退化导致 7% 淡绿变 100% 不透明。已按类名声明的 alpha 重写为 `rgba()`。
+- **整页被放大、顶部导航消失**：WKWebView 在布局完成前加载，viewport 按 0 宽计算。已改为拿到真实宽度后再加载。
+- **字体二次放大**：注入 `-webkit-text-size-adjust: 100%`。
 
 ## 功能
 
@@ -66,7 +62,7 @@ WKWebView 在布局完成前加载页面时 `bounds` 仍为 `.zero`，viewport �
 
 | 项目 | 值 |
 | --- | --- |
-| 版本 | 1.0.2 (Build 3) |
+| 版本 | 1.0.3 (Build 4) |
 | Bundle ID | `top.lycl.ghostprotocol` |
 | 最低系统 | iOS 14.0 |
 | 架构 | arm64 |
