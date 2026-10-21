@@ -120,6 +120,12 @@ final class WebViewController: UIViewController {
             WKUserScript(source: typographyFix, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         )
 
+        // 修复 Tailwind 透明度类在缺少 color-mix() 支持时的「纯色退化」，
+        // 否则卡片背景会从 7% 淡绿变成 100% 不透明亮绿并盖住内容
+        configuration.userContentController.addUserScript(
+            WKUserScript(source: SitePatches.alphaFallback, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+        )
+
         return configuration
     }
 
