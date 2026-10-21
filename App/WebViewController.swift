@@ -91,6 +91,23 @@ final class WebViewController: UIViewController {
 
     override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
 
+    override var canBecomeFirstResponder: Bool { true }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        becomeFirstResponder()
+    }
+
+    /// 摇一摇：把告警横幅及其祖先元素的关键样式打到屏幕上，
+    /// 在没有 Safari 检查器的情况下用来定位残留的渲染问题
+    override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+        guard motion == .motionShake else {
+            super.motionEnded(motion, with: event)
+            return
+        }
+        webView?.evaluateJavaScript(SitePatches.diagnostic, completionHandler: nil)
+    }
+
     deinit {
         progressObservation?.invalidate()
         canGoBackObservation?.invalidate()
