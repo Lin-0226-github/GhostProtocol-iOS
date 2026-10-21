@@ -14,6 +14,36 @@ import Foundation
 /// 会被自动跳过，不会重复干预。
 enum SitePatches {
 
+    /// Tailwind v4 把方向渐变写成 `linear-gradient(to right in oklab, ...)`，
+    /// `in oklab` 插值语法需要 Safari 16.4+。旧版 WebKit 无法解析，
+    /// 会**整条丢弃 background-image**，导致全站 488 处渐变一起消失
+    /// （横幅两端渐隐、卡片光晕、按钮底色都会退化成实心或全透明）。
+    ///
+    /// 这里把 --tw-gradient-position 里的插值空间去掉，退回默认 sRGB 插值，
+    /// 渐变本身不受影响，只是颜色过渡不再走 oklab。
+    static let gradientFallback = #"""
+    (function () {
+      if (window.__ghqGradientPatch) { return; }
+      window.__ghqGradientPatch = true;
+
+      var css = [
+        '.bg-gradient-to-t,.bg-linear-to-t{--tw-gradient-position:to top!important}',
+        '.bg-gradient-to-tr,.bg-linear-to-tr{--tw-gradient-position:to top right!important}',
+        '.bg-gradient-to-r,.bg-linear-to-r{--tw-gradient-position:to right!important}',
+        '.bg-gradient-to-br,.bg-linear-to-br{--tw-gradient-position:to bottom right!important}',
+        '.bg-gradient-to-b,.bg-linear-to-b{--tw-gradient-position:to bottom!important}',
+        '.bg-gradient-to-bl,.bg-linear-to-bl{--tw-gradient-position:to bottom left!important}',
+        '.bg-gradient-to-l,.bg-linear-to-l{--tw-gradient-position:to left!important}',
+        '.bg-gradient-to-tl,.bg-linear-to-tl{--tw-gradient-position:to top left!important}'
+      ].join('');
+
+      var style = document.createElement('style');
+      style.id = 'ghq-gradient-fallback';
+      style.textContent = css;
+      (document.head || document.documentElement).appendChild(style);
+    })();
+    """#
+
     static let alphaFallback = #"""
     (function () {
       if (window.__ghqAlphaPatch) { return; }
