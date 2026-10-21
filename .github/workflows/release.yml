@@ -89,6 +89,8 @@ jobs:
               --notes-file RELEASE_NOTES.md
           fi
           gh release upload "$TAG" out/*.ipa --repo "$GITHUB_REPOSITORY" --clobber
+          # 确保不会被留成草稿、并标记为最新版本
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
 
       - name: Summary
         if: always()
