@@ -1,6 +1,29 @@
-# 指挥中心 v1.0.0 · 正式版
+# 指挥中心 v1.0.1 · 正式版
 
 把 **全球灵异事件处理总部（GHOST PROTOCOL）** 封装成原生 iOS 应用。
+
+## 本版修复
+
+### 卡片背景变成整块亮绿色、内容被遮挡
+
+站点用 Tailwind v4 的 `bg-primary/[0.07]` 这类透明度类，编译产物是两条同选择器规则：
+
+```css
+.bg-primary\/\[0\.07\]{background-color:var(--primary)}                                  /* 纯色兜底 */
+.bg-primary\/\[0\.07\]{background-color:color-mix(in oklab,var(--primary) 7%,transparent)} /* 正确值 */
+```
+
+`color-mix()` 需要 Safari 16.2+。宿主不支持时第二条被整条丢弃，背景退化为 **100% 不透明的主题绿**，于是卡片变成一整块亮绿色并盖住标题、进度数字等内容。
+
+本版加入运行时兜底：凡「类名声明了透明度、但计算值是不透明纯色」的元素，按类名里的 alpha 重写为 `rgba()`。宿主本身支持 `color-mix()` 时计算值已是半透明，会自动跳过，不会重复干预。
+
+### 整页被放大、顶部导航消失、标题被裁切
+
+WKWebView 在布局完成前加载页面时，`bounds` 仍为 `.zero`，viewport 按 0 宽计算，导致 `width=device-width` 失效。已改为在 `viewDidLayoutSubviews` 中确认拿到真实宽度后再加载。
+
+### 字体被二次放大
+
+注入 `-webkit-text-size-adjust: 100%`，避免窄视口下 WebKit 的自动字号放大干扰排版。
 
 ## 功能
 
@@ -17,11 +40,6 @@
 - **文件上传**：支持拍照、相册、麦克风输入
 - **进程自愈**：Web 进程被系统回收后自动重载
 
-## 本版修复
-
-- 修正 WKWebView 在布局完成前加载导致的 **viewport 计算错误**：此前表现为整页被放大、顶部导航栏与红色告警条被挤出视口、卡片填充层撑满整块区域
-- 注入 `-webkit-text-size-adjust: 100%`，避免窄视口下字体被二次放大
-
 ## 安装
 
 本包为 **未签名 IPA**，需要自行签名后才能安装到 iPhone：
@@ -32,17 +50,17 @@
 4. 手机上：设置 → 通用 → VPN 与设备管理 → 信任开发者
 
 > 免费 Apple ID 签名的证书 7 天过期，到期后重新签一次即可，应用数据不会丢失。
-> 已有旧版本时可直接覆盖安装，Bundle ID 相同（`top.lycl.ghostprotocol`），登录态保留。
+> 可直接覆盖旧版本安装，Bundle ID 相同（`top.lycl.ghostprotocol`），登录态保留。
 
 ## 技术规格
 
 | 项目 | 值 |
 | --- | --- |
-| 版本 | 1.0.0 (Build 1) |
+| 版本 | 1.0.1 (Build 2) |
 | Bundle ID | `top.lycl.ghostprotocol` |
 | 最低系统 | iOS 14.0 |
 | 架构 | arm64 |
-| 体积 | 约 48 KB |
+| 体积 | 约 50 KB |
 
 ## 说明
 
