@@ -66,6 +66,8 @@ final class WebViewController: UIViewController {
 
     /// 最近一次站内请求，用于失败后重试
     private var lastURL: URL?
+    /// 首页只在布局完成后加载一次
+    private var hasLoadedHome = false
 
     // MARK: - 生命周期
 
@@ -74,6 +76,16 @@ final class WebViewController: UIViewController {
         view.backgroundColor = Theme.background
         configureWebView()
         configureLayout()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // 关键：必须等 WebView 拿到真实尺寸后再加载页面。
+        // 若在 viewDidLoad 里直接 load，此时 bounds 仍是 .zero，
+        // WKWebView 会按 0 宽计算 viewport，导致 width=device-width 失效、整页被放大，
+        // 表现为：标题被裁切、顶部导航消失、卡片内容被撑变形。
+        guard !hasLoadedHome, webView.bounds.width > 1 else { return }
+        hasLoadedHome = true
         load(Site.home)
     }
 
@@ -95,6 +107,19 @@ final class WebViewController: UIViewController {
         configuration.mediaTypesRequiringUserActionForPlayback = []
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+
+        // 关掉 WebKit 的「字体自动放大」，避免窄视口下字号被二次放大导致排版变形
+        let typographyFix = """
+        (function () {
+          var style = document.createElement('style');
+          style.textContent = 'html{-webkit-text-size-adjust:100%!important;text-size-adjust:100%!important;}';
+          document.documentElement.appendChild(style);
+        })();
+        """
+        configuration.userContentController.addUserScript(
+            WKUserScript(source: typographyFix, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        )
+
         return configuration
     }
 
